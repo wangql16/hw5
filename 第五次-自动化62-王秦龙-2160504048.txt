@@ -1,0 +1,293 @@
+巴特沃斯滤实现
+
+function [ Butter,g ] = butter( D0,n,p,I )
+%生成M*N维的n=2阶巴特沃斯滤波器，其中截止频率D0处下降为50%,p为1时为低通，p=-1时为高通,I为输入图像
+%   此处显示详细说明
+[M,N]=size(I);
+PP=double(I);
+P=zeros(2*M,2*N);
+%将图像补到2M,2N
+for x=1:M
+    for y=1:N
+        P(x,y)=PP(x,y);
+    end
+end
+
+        
+Pb=fft2(P);
+F1=fftshift(Pb);     %中心平移后的F(u,v)
+Butter=zeros(2*M,2*N);
+xo=round(M);       %滤波器中心(xo,yo)
+yo=round(N);
+for i=1:2*M            %生成巴特沃斯滤波器
+    for j=1:2*N
+        d=sqrt((i-xo)^2+(j-yo)^2);
+        r=(d/D0)^p;
+        Butter(i,j)=1/((1+r)^(2*n));
+    end
+end
+G=F1.*Butter;
+G=ifftshift(G);
+G=ifft2(G);
+GG=zeros(M,N);
+for x=1:M            %取变换后图像的左上部分
+    for y=1:N
+        GG(x,y)=G(x,y);
+    end
+end
+g=uint8(real(GG));
+end
+
+高斯实现
+
+function [ Gauss,g ] = gauss( D0,I ,s)
+%生成M*N维的高斯低通滤波器，其中截止频率D0处下降为最大值的0.607,s=1时为低通，s=-1时为高通
+%   此处显示详细说明
+[M,N]=size(I);
+PP=double(I);
+P=zeros(2*M,2*N);
+%将图像补到2M,2N
+for x=1:M
+    for y=1:N
+        P(x,y)=PP(x,y);
+    end
+end
+Pb=fft2(P);
+F1=fftshift(Pb);     %中心平移后的F(u,v)
+
+Gauss=zeros(2*M,2*N);
+xo=round(M);       %滤波器中心(xo,yo)
+yo=round(N);
+for i=1:2*M            %生成高斯滤波器
+    for j=1:2*N
+        d=sqrt((i-xo)^2+(j-yo)^2);
+        if(s==1)
+        Gauss(i,j)=exp(-(d^2/(2*D0^2)));
+        elseif(s==-1)
+        Gauss(i,j)=1-exp(-(d^2/(2*D0^2)));
+        end
+    end
+end
+G=F1.*Gauss;
+G=ifftshift(G);
+G=ifft2(G);
+GG=zeros(M,N);
+for x=1:M            %取变换后图像的左上部分
+    for y=1:N
+        GG(x,y)=G(x,y);
+    end
+end
+g=uint8(real(GG));
+end
+
+低通实现及功率谱比计算
+
+I1=imread('test1.pgm');
+I2=imread('test2.tif');
+
+D0=[10 30 60 80 160];
+for i=1:5
+    figure(i)
+    subplot(231);imshow(I1);title('原图');
+    [ Butter1,bg1 ] = butter( D0(i),2,1,I1 );subplot(232);imshow(bg1);str=['n=2,巴特沃斯低通D0=',num2str(D0(i))];title(str);
+    [ Gauss1 ,gg2 ] = gauss( D0(i),I1,1 );subplot(233);imshow(gg2);str=['高斯低通D0=',num2str(D0(i))];title(str);
+    subplot(234);imshow(I2);title('原图');
+    [ Butter2,bg2 ] = butter( D0(i),2,1,I2 );subplot(235);imshow(bg2);str=['n=2,巴特沃斯低通D0=',num2str(D0(i))];title(str);
+    [ Gauss2 ,gg2 ] = gauss( D0(i),I2,1 );subplot(236);imshow(gg2);str=['高斯低通D0=',num2str(D0(i))];title(str);
+end
+
+%观察上述结果，n=2
+%D0=160的巴特沃斯低通和D0=30的高斯低通又比较相近的滤波效果，取这两个滤波器计算功率谱比.
+%作为对比，取n=2，D0同为160的两个滤波器求功率谱比
+figure(6)
+ [ Butter,bg ] = butter( 160,2,1,I1 ); 
+ [ Gauss ,gg ] = gauss( 30,I1,1 );
+ [m ,n]=size(Butter);
+ R=zeros(m,n);
+ for i=1:m
+     for j=1:n
+        R(i,j)=(real(Gauss(i,j))^2+imag(Gauss(i,j))^2)/(real(Butter(i,j))^2+imag(Butter(i,j))^2);
+     end
+ end
+ imshow(log(abs(R)),[]);title('gauss30/butter160');
+ 
+ figure(7)
+ [ compareGauss ,comparegg ] = gauss( 160,I1,1 );
+ compareR=zeros(m,n);
+ for i=1:m
+     for j=1:n
+        compareR(i,j)=(real(compareGauss(i,j))^2+imag(compareGauss(i,j))^2)/(real(Butter(i,j))^2+imag(Butter(i,j))^2);
+     end
+ end
+ imshow(log(abs(compareR)),[]);title('gauss160/butter160');
+
+高通实现及功率谱计算
+
+I1=imread('test3_corrupt.pgm');
+I2=imread('test4 copy.bmp');
+
+D0=[5 10 20 30 60];
+for i=1:5
+    figure(i)
+    subplot(231);imshow(I1);title('原图');
+    [ Butter1,bg1 ] = butter( D0(i),2,-1,I1 );subplot(232);imshow(bg1);str=['n=2,巴特沃斯高通D0=',num2str(D0(i))];title(str);
+    [ Gauss1 ,gg2 ] = gauss( D0(i),I1,-1 );subplot(233);imshow(gg2);str=['高斯高通D0=',num2str(D0(i))];title(str);
+    subplot(234);imshow(I2);title('原图');
+    [ Butter2,bg2 ] = butter( D0(i),2,-1,I2 );subplot(235);imshow(bg2);str=['n=2,巴特沃斯高通D0=',num2str(D0(i))];title(str);
+    [ Gauss2 ,gg2 ] = gauss( D0(i),I2,-1 );subplot(236);imshow(gg2);str=['高斯高通D0=',num2str(D0(i))];title(str);
+end
+
+%观察上述结果
+%D0=5的巴特沃斯高通和D0=20的高斯高通又比较相近的滤波效果，取这两个滤波器计算功率谱比.
+%作为对比，取n=2，D0同为5的两个滤波器求功率谱比
+figure(6)
+ [ Butter,bg ] = butter( 5,2,-1,I1 );    %Butter为巴特沃斯滤波器的频谱
+ [ Gauss ,gg ] = gauss( 20,I1,-1 );      %Gauss为高斯滤波器的频谱
+ [m ,n]=size(Butter);
+ R=zeros(m,n);
+ for i=1:m
+     for j=1:n
+        R(i,j)=(real(Gauss(i,j))^2+imag(Gauss(i,j))^2)/(real(Butter(i,j))^2+imag(Butter(i,j))^2);
+     end
+ end
+ imshow(log(abs(R)),[]);title('gauss20/butter5');
+ 
+ figure(7)
+ [ compareGauss ,comparegg ] = gauss( 5,I1,-1 );
+ compareR=zeros(m,n);
+ for i=1:m
+     for j=1:n
+        compareR(i,j)=(real(compareGauss(i,j))^2+imag(compareGauss(i,j))^2)/(real(Butter(i,j))^2+imag(Butter(i,j))^2);
+     end
+ end
+ imshow(log(abs(compareR)),[]);title('gauss5/butter5');
+
+拉普拉斯
+
+function [ g,HFR ] = laplace( I )
+%UNTITLED4 Laplace高通滤波,HRF为提取的标定过的边缘模板，g为
+%   此处显示详细说明
+[M,N]=size(I);
+P1=double(I);
+PP=P1/max(P1(:));       %将原始图像归一化到[0,1]
+P=zeros(2*M,2*N);
+%将图像补到2M,2N
+for x=1:M
+    for y=1:N
+        P(x,y)=PP(x,y);
+    end
+end
+Pb=fft2(P);
+F1=fftshift(Pb);     %中心平移后的F(u,v)
+
+HF=zeros(2*M,2*N);
+xo=round(M);       %滤波器中心(xo,yo)
+yo=round(N);
+for i=1:2*M            
+    for j=1:2*N
+        d=(i-xo)^2+(j-yo)^2;
+        HF(i,j)=(-4*3.1415*3.1415*d)*F1(i,j);
+    end
+end
+HF=ifftshift(HF);
+HF=ifft2(HF);
+GG=zeros(M,N);
+for x=1:M            %取变换后图像的左上部分
+    for y=1:N
+        GG(x,y)=HF(x,y);
+    end
+end
+HFR1=real(GG);
+%把H(u,v)*F(u,v)的结果标定到[-1,1];
+MIN=-min(HFR1(:));
+MAX=max(HFR1(:));
+for i=1:M
+    for j=1:N
+        if(HFR1(i,j)<0) 
+            HFR1(i,j)=HFR1(i,j)/MIN;
+        else
+            HFR1(i,j)=HFR1(i,j)/MAX;
+        end
+    end
+end
+
+HFR=HFR1-min(HFR1(:));
+HFR=(HFR/max(HFR(:)))*256;   %提取的边缘的标定结果
+HFR=uint8(HFR);
+
+g1=HFR1/max(PP(:))+PP;         %按照书上方法标定的加强结果，数值范围在[-1,1]
+g=uint8(256*g1);
+end
+
+掩模实现
+
+function [ Unmask ] = unmask( I )
+%非锐化掩模,为和空域对比，利用高斯低通滤波器D0=30，对图像平滑，并设置高提升系数4
+%   此处显示详细说明
+[M,N]=size(I);
+I=double(I);
+P=zeros(2*M,2*N);
+%将图像补到2M,2N
+for x=1:M
+    for y=1:N
+        P(x,y)=I(x,y);
+    end
+end
+Iw=fft2(P);
+Iw=fftshift(Iw);
+
+%D0=30的高斯低通滤波器
+D0=30;
+Gauss=zeros(2*M,2*N);
+xo=round(M);       %滤波器中心(xo,yo)
+yo=round(N);
+for i=1:2*M            %生成高斯模板
+    for j=1:2*N
+        d=sqrt((i-xo)^2+(j-yo)^2);
+        Gauss(i,j)=exp(-(d^2/(2*D0^2)));
+    end
+end
+%掩模频域实现
+G=zeros(2*M,2*N);
+for i=1:2*M
+    for j=1:2*N
+        m=1+4*(1-Gauss(i,j));
+        G(i,j)=Iw(i,j)*m;
+    end
+end
+G=ifftshift(G);
+G=ifft2(G);
+GG=zeros(M,N);
+for x=1:M            %取变换后图像的左上部分
+    for y=1:N
+        GG(x,y)=G(x,y);
+    end
+end
+Unmask=uint8(real(GG));     
+end
+
+
+拉普拉斯和掩模的主函数
+
+I1=imread('test3_corrupt.pgm');
+I2=imread('test4 copy.bmp');
+
+P1=double(I1);
+[g1,HFR1 ] = laplace( P1 );
+subplot(231);imshow(I1);title('原图');
+subplot(232);imshow(g1);title('laplace增强后图像');
+subplot(233);imshow(HFR1);title('经过标定后laplace提取的边缘');
+P2=double(I2);
+[g2,HFR2 ] = laplace( P2 );
+subplot(234);imshow(I2);title('原图');
+subplot(235);imshow(g2);title('laplace增强后图像');
+subplot(236);imshow(HFR2);title('经过标定后laplace提取的边缘');
+
+figure(2)
+gu1=unmask(I1);
+subplot(221);imshow(I1);title('原图');
+subplot(222);imshow(gu1);title('unmask增强后图像');
+
+gu2=unmask(I2);
+subplot(223);imshow(I2);title('原图');
+subplot(224);imshow(gu2);title('unmask增强后图像');
